@@ -1,4 +1,4 @@
-# analisys_mnist_usps
+# Testing catastrophic forgetting and algorithms to mitigate it
 
 # simple fine-tuning
 Il file contiene il codice scritto su jupyter notebook, nel quale si crea un network e poi si eseguono i seuguenti passi:
@@ -18,4 +18,7 @@ Vogliamo migliorare la performance del MNIST che dopo il fine-tuning su USPS è 
 - Facciamo un training sulla rete di partenza utilizzando dirty-dataset con un numero incrementale di elementi presi da MNIST. 
 - Il test di example replay viene fatto per N = 1, 2, 5, 10, 50, 100, 500, 1000, 2000, 5000, e ogni volta viene fatto un test sia su MNIST che su USPS per vedere come sono cambiati i valori dell'accuratezza
 - Lo stesso esperimento viene fatto con MNIST e Fashion!MNIST 
+
+# Learning Without Forgetting
+Applichiamo la tecnica del LwF al caso di Domain-IL. In un primo passaggio dalla rete addestrata su MNIST vogliamo addestrare su USPS senza dimenticare quello imparato in precedenza. Successivamente a questa rete addestriamo su SVHN, di nuovo con l'obiettivo di non dimenticare i task precedenti
 
