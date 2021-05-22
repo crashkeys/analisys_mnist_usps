@@ -71,13 +71,13 @@ def training(network, loader, optimizer, num_epochs):
 
 def testing(network, dataset, loader):
     total_correct = 0
-    #with torch.no_grad():
-    for batch in loader:
-        images, labels = batch
-        predictions = network(images)
-        correct = get_num_correct(predictions, labels)
-        total_correct += correct
-    return(f'total correct: {total_correct} / {len(dataset)}. {Fore.LIGHTMAGENTA_EX}Accuracy: {(total_correct/len(dataset))*100}{Style.RESET_ALL}')
+    with torch.no_grad():
+        for batch in loader:
+            images, labels = batch
+            predictions = network(images)
+            correct = get_num_correct(predictions, labels)
+            total_correct += correct
+        return(f'total correct: {total_correct} / {len(dataset)}. {Fore.LIGHTMAGENTA_EX}Accuracy: {(total_correct/len(dataset))*100}{Style.RESET_ALL}')
 
 
 def temp_scale(Y, T): #prede un vettore (immagine) e ridà il vettore scalato
@@ -92,7 +92,7 @@ def temp_scale(Y, T): #prede un vettore (immagine) e ridà il vettore scalato
 def knowledge_distillation(new, old): #per una singola immagine
     result = 0
     for j in range(10):
-        result += temp_scale(old, 2)[j] * math.log(temp_scale(new, 2)[j] + 1e-24)
+        result += temp_scale(old, 2)[j] * math.log(temp_scale(new, 2)[j] + 1e-34)
     return -result
 
 
@@ -127,7 +127,7 @@ def LwF(network_new, network_old, loader, lr, lam, num_epochs):
 
             loss_old = know_dist_batch(get_one_hot(labels, 10), preds_old)  # mitigate forgetting
 
-            loss = loss_new + lam * loss_old
+            loss = loss_new + (lam * loss_old)
 
             opt.zero_grad()
             #loss.backward(retain_graph=True)
