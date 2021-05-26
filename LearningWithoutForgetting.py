@@ -7,7 +7,6 @@ from colorama import Fore, Style
 import math
 
 
-
 class Network(nn.Module):
     def __init__(self):
         super().__init__()
@@ -71,13 +70,12 @@ def training(network, loader, optimizer, num_epochs):
 
 def testing(network, dataset, loader):
     total_correct = 0
-    with torch.no_grad():
-        for batch in loader:
-            images, labels = batch
-            predictions = network(images)
-            correct = get_num_correct(predictions, labels)
-            total_correct += correct
-        return(f'total correct: {total_correct} / {len(dataset)}. {Fore.LIGHTMAGENTA_EX}Accuracy: {(total_correct/len(dataset))*100}{Style.RESET_ALL}')
+    for batch in loader:
+        images, labels = batch
+        predictions = network(images)
+        correct = get_num_correct(predictions, labels)
+        total_correct += correct
+    return(f'total correct: {total_correct} / {len(dataset)}. {Fore.LIGHTMAGENTA_EX}Accuracy: {(total_correct/len(dataset))*100}{Style.RESET_ALL}')
 
 
 def temp_scale(Y, T): #prede un vettore (immagine) e ridà il vettore scalato
@@ -89,17 +87,17 @@ def temp_scale(Y, T): #prede un vettore (immagine) e ridà il vettore scalato
     return torch.tensor(Y_new)
 
 
-def knowledge_distillation(new, old): #per una singola immagine
+def knowledge_distillation(preds, target): #per una singola immagine
     result = 0
     for j in range(10):
-        result += temp_scale(old, 2)[j] * math.log(temp_scale(new, 2)[j] + 1e-34)
+        result += temp_scale(target, 2)[j] * math.log(temp_scale(preds, 2)[j] + 1e-34)
     return -result
 
 
-def know_dist_batch(new_batch, old_batch):
+def know_dist_batch(preds, target):
     V = []
-    for idx in range(len(new_batch)):
-        kn = knowledge_distillation(new_batch[idx], old_batch[idx])
+    for idx in range(len(preds)):
+        kn = knowledge_distillation(preds[idx], target[idx])
         V.append(kn)
     return sum(V) / len(V)
 
@@ -110,8 +108,7 @@ def get_one_hot(target,num_class):    #ritorna un vettore probabilità dal label
     return one_hot
 
 
-def LwF(network_new, network_old, loader, lr, lam, num_epochs):
-    opt = optim.Adam(network_new.parameters(), lr, weight_decay=0.0005)
+def LwF(network_new, network_old, loader, opt, lam, num_epochs):
     for epoch in range(num_epochs):
 
         total_loss = 0
@@ -123,14 +120,13 @@ def LwF(network_new, network_old, loader, lr, lam, num_epochs):
             preds_new = network_new(images)  # new network, new images
             preds_old = network_old(images)  # old network, new images
 
-            loss_new = F.cross_entropy(preds_new, labels)  # semplice fine-tuning
+            loss_new = F.cross_entropy(preds_new, labels) # semplice fine-tuning
 
-            loss_old = know_dist_batch(get_one_hot(labels, 10), preds_old)  # mitigate forgetting
+            loss_old = know_dist_batch(preds_new, preds_old)  # mitigate forgetting
 
             loss = loss_new + (lam * loss_old)
 
             opt.zero_grad()
-            #loss.backward(retain_graph=True)
             loss.backward()
             opt.step()
 
