@@ -1,22 +1,25 @@
 import torch
+import torch.optim as optim
 import torchvision
 from torchvision import transforms
-import torch.nn.functional as F
-import torch.optim as optim
-
-import LearningWithoutForgetting as lwf
-
-
+import lwf
 
 
 if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"--> Using {device}")
 
-    ### DATASETS & LOADERS ###
+    ### DATASETS ###
 
     USPS_transform = transforms.Compose([
         transforms.Resize((28, 28)),
         transforms.ToTensor(),
+    ])
+
+    SVHN_transform = transforms.Compose([
+        transforms.Resize((28, 28)),
+        transforms.ToTensor(),
+        transforms.Grayscale(num_output_channels=1)
     ])
 
     usps = torchvision.datasets.USPS("./data"
@@ -25,79 +28,116 @@ if __name__ == '__main__':
                                      , transform=USPS_transform
                                      )
 
-    mnist = torchvision.datasets.MNIST(
-        root='./data'
-        , train=True
-        , download=True
-        , transform=transforms.Compose([transforms.ToTensor()])
-    )
+    mnist = torchvision.datasets.MNIST(root='./data'
+                                       , train=True
+                                       , download=True
+                                       , transform=transforms.Compose([transforms.ToTensor()])
+                                       )
 
-    SVHN_transform = transforms.Compose([
-        transforms.Resize((28, 28)),
-        transforms.ToTensor(),
-        transforms.Grayscale(num_output_channels=1)
-    ])
+    svhn = torchvision.datasets.SVHN(root='./data'
+                                     , split='train'
+                                     , transform=SVHN_transform
+                                     , download=True)
 
-    svhn = torchvision.datasets.SVHN(
-        root='./data'
-        , split='train'
-        , transform=SVHN_transform
-        , download=True)
+    combination = []
+    combination.append(mnist)
+    combination.append(usps)
+    combination.append(svhn)
 
-    svhn_loader = torch.utils.data.DataLoader(svhn, batch_size=100, shuffle=False)
+    total_dataset = torch.utils.data.ConcatDataset(combination)
 
-    mnist_loader = torch.utils.data.DataLoader(mnist, batch_size=100, shuffle=False)
-    usps_loader = torch.utils.data.DataLoader(usps, batch_size=100, shuffle=False)
+    ### LOADER ###
 
+    mnist_loader = torch.utils.data.DataLoader(mnist, batch_size=100, shuffle=True)
+    usps_loader = torch.utils.data.DataLoader(usps, batch_size=100, shuffle=True)
+    svhn_loader = torch.utils.data.DataLoader(svhn, batch_size=100, shuffle=True)
+    total_loader = torch.utils.data.DataLoader(total_dataset, batch_size=100, shuffle=True)
 
-
-
-    network = lwf.Network()
-    optimizer1 = optim.Adam(network.parameters(), 0.01) #per il training su mnist
-
-    print("-----> TRAINING <--------")
-    lwf.training(network, mnist_loader, optimizer1, num_epochs=5)
-    print("\t\tTesting on MNIST:")
-    print(f'\t\t {lwf.testing(network, mnist, mnist_loader)}')
-    print("\t\tTesting on SVHN:")
-    print(f'\t\t {lwf.testing(network, svhn, svhn_loader)}')
+    ### JOINT TRAINING ###
+    network_jt = lwf.Network()
+    opt_jt = optim.Adam(network_jt.parameters(), lr=0.01)
+    print("----> Joint Training <-------")
+    lwf.training(network_jt, total_loader, opt_jt, 10)
+    print("\t\t Testing on MNIST: ", lwf.testing(network_jt, mnist, mnist_loader))
+    print("\t\t Testing on USPS: ", lwf.testing(network_jt, usps, usps_loader))
+    print("\t\t Testing on SVHN: ", lwf.testing(network_jt, svhn, svhn_loader))
     print(""
-          ""
+          "#############################################################"
           "")
 
-    torch.save(network.state_dict(), 'PATHS_test/mnist6.pth')
+    ### TRAINING ON FIRST TASK (MNIST) ###
+    network = lwf.Network()
+    opt = optim.Adam(network.parameters(), lr=0.01)
+    print("----> Testing on MNIST <----- (check forward transfer)")
+    lwf.training(network, mnist_loader, opt, 10)
+    print("\t\t Testing on MNIST: ", lwf.testing(network, mnist, mnist_loader))
+    print("\t\t Testing on USPS: ", lwf.testing(network, usps, usps_loader))
+    print("\t\t Testing on SVHN: ", lwf.testing(network, svhn, svhn_loader))
+    torch.save(network.state_dict(), 'PATHS/network_mnist')
+    print(""
+          "#############################################################"
+          "")
 
-    #fine-tuning
-    # print("-----> Fine Tuning <------")
-    # opt = optim.Adam(network.parameters(), 1e-3)
-    # lwf.training(network, svhn_loader, opt, num_epochs=10)
-    # print("\t\tTesting on MNIST:")
-    # print(f'\t\t {lwf.testing(network, mnist, mnist_loader)}')
-    # print("\t\tTesting on SVHN:")
-    # print(f'\t\t {lwf.testing(network, svhn, svhn_loader)}')
-    # print(""
-    #       "")
+    ### FINE TUNING MNIST -> USPS ###
+    print("----> Fine Tuning MNIST -> USPS")
+    for lr in (0.01, 1e-3, 1e-4, 2e-4):
+        print("-> lr = ", lr)
+        network.load_state_dict(torch.load('PATHS/network_mnist'))
+        opt1 = optim.Adam(network.parameters(), lr=lr)
+        lwf.training(network, usps_loader, opt1, 10)
+        print("\t\t Testing on MNIST: ", lwf.testing(network, mnist, mnist_loader))
+        print("\t\t Testing on USPS: ", lwf.testing(network, usps, usps_loader))
+        print("\t\t Testing on SVHN: ", lwf.testing(network, svhn, svhn_loader))
+        print(" ")
+    torch.save(network.state_dict(), 'PATHS/network_mnist+usps')
+    print(""
+          "#############################################################"
+          "")
 
+    ### FINE TUNING MNIST + USPS -> SVHN ###
+    print("----> Fine Tuning MNIST + USPS -> SVHN")
+    for lr in (0.01, 1e-3, 1e-4):
+        print("-> lr = ", lr)
+        network.load_state_dict(torch.load('PATHS/network_mnist+usps2'))
+        opt11 = optim.Adam(network.parameters(), lr=lr)
+        lwf.training(network, svhn_loader, opt11, 10)
+        print("\t\t Testing on MNIST: ", lwf.testing(network, mnist, mnist_loader))
+        print("\t\t Testing on USPS: ", lwf.testing(network, usps, usps_loader))
+        print("\t\t Testing on SVHN: ", lwf.testing(network, svhn, svhn_loader))
+        print(" ")
+    print(""
+          "#############################################################"
+          "")
+
+    ## go back to mnist trained to try other methods ##
+    network.load_state_dict(torch.load('PATHS/network_mnist'))
 
     network2 = lwf.Network()
-    network2.load_state_dict(torch.load('PATHS_test/mnist6.pth'))
-    network.load_state_dict(torch.load('PATHS_test/mnist6.pth'))
+    ### LwF MNIST -> USPS ###
+    print("----> Learning Without Forgetting MNIST -> USPS")
+    for lr in (0.01, 1e-3, 1e-4, 2e-4):
+        for lam in (0.0001, 0.001, 0.01, 10, 100, 1):
+            print("-> lr = ", lr, " lam = ", lam)
+            network2.load_state_dict(torch.load('PATHS/network_mnist'))
+            lwf.LwF(network2, network, usps_loader, lr=lr, lam=lam, num_epochs=10)
+            print("\t\t Testing on MNIST: ", lwf.testing(network2, mnist, mnist_loader))
+            print("\t\t Testing on USPS: ", lwf.testing(network2, usps, usps_loader))
+            print("\t\t Testing on SVHN: ", lwf.testing(network2, svhn, svhn_loader))
+            print(" ")
+    torch.save(network2.state_dict(), 'PATHS/network_mnist+usps_Lwf')  # salvo la versione con lr=2e-4 e lam=1
+    print(""
+          "#############################################################"
+          "")
 
-    lr = 1e-3
-    opt = optim.Adam(network2.parameters(), lr, weight_decay=0.0005) #prede i parametri della rete addestrata su mnist
-    for lam in (100, 1):
-        print("--------> L w F <------------")
-        print(f'lr = {lr}, lambda = {lam}')
-        network2.load_state_dict(torch.load('PATHS_test/mnist6.pth'))
-        network.load_state_dict(torch.load('PATHS_test/mnist6.pth'))
-        lwf.LwF(network2, network, svhn_loader, opt, lam=lam, num_epochs=5)
-        print("\t\tTesting on MNIST:")
-        print(f'\t\t {lwf.testing(network2, mnist, mnist_loader)}')
-        print("\t\tTesting on SVHN:")
-        print(f'\t\t {lwf.testing(network2, svhn, svhn_loader)}')
-        print(""
-              "")
-
-
-
-
+    network3 = lwf.Network()
+    ### LwF MNIST + USPS -> SVHN ###
+    print("----> Learning Without Forgetting MNIST + USPS -> SVHN")
+    for lr in (0.01, 1e-3, 1e-4, 2e-4):
+        for lam in (0.0001, 0.001, 0.01, 10, 1):
+            print("-> lr = ", lr, " lam = ", lam)
+            network3.load_state_dict(torch.load('PATHS/network_mnist+usps_Lwf2'))
+            lwf.LwF(network3, network2, svhn_loader, lr=lr, lam=lam, num_epochs=10)
+            print("\t\t Testing on MNIST: ", lwf.testing(network3, mnist, mnist_loader))
+            print("\t\t Testing on USPS: ", lwf.testing(network3, usps, usps_loader))
+            print("\t\t Testing on SVHN: ", lwf.testing(network3, svhn, svhn_loader))
+            print(" ")
