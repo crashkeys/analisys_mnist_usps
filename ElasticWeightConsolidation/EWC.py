@@ -48,8 +48,7 @@ class EWC_obj(object):
         return loss
 
 
-def ewc_train(network, optimizer, dataset, loader, ewc, lam, num_epochs, type="ewc"):
-    accs = []
+def ewc_train(network, optimizer, dataset, loader, ewc, lam, num_epochs, type="ewc", test=None):
     for epoch in range(num_epochs):
         total_loss = 0
         total_correct = 0
@@ -75,18 +74,12 @@ def ewc_train(network, optimizer, dataset, loader, ewc, lam, num_epochs, type="e
             total_correct += Network.get_num_correct(preds, labels)
 
         accuracy = (total_correct / len(dataset)) * 100
-        accs.append(accuracy)
-        print(f'epoch: {epoch}, loss: {total_loss}, total_correct: {total_correct} / {len(dataset)}, --> {Fore.LIGHTMAGENTA_EX}Accuracy: {accuracy}{Style.RESET_ALL}')
-    #plot_graph(num_epochs, accs, type)
+        print(f'epoch: {epoch}, loss: {total_loss}, total_correct: {total_correct} / {len(dataset)}, --> {Fore.LIGHTCYAN_EX}Accuracy: {accuracy}{Style.RESET_ALL}')
+        
+        #test is for printing epoch accuracies of past tasks
+        if test is not None:
+            for t in test:
+                print(f"\t\t\t\t {Fore.LIGHTGREEN_EX}Testing back... {Network.testing(network, t[0], t[1])}{Style.RESET_ALL}")
 
 
-# def plot_graph(num_epochs, accs, type):
-#     x = [i for i in range(num_epochs)]
-#     if type == 'L2':
-#         color = 'springgreen'
-#         marker = 'o'
-#     else:
-#         color = 'dodgerblue'
-#         marker = 'o'
-#     plt.plot(x, accs, color=color, marker=marker)
 
